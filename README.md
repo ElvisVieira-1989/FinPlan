@@ -2,6 +2,7 @@ Funcionalidades
 
 • Planejamento Simplificado: Insira seu salário mensal e quanto deseja investir para obter um cálculo instantâneo.
 • Composição de Gastos: Sugestão baseada na regra 50/30/20 (adaptada), dividindo seu orçamento em:
+
   ◦ Gastos Essenciais: O que você precisa para viver.
   ◦ Estilo de Vida: Seus gastos com lazer e desejos pessoais.
   ◦ Investimentos: Foco na construção de patrimônio.
@@ -9,7 +10,9 @@ Funcionalidades
 • Perfis de Investimento: Sugestões detalhadas de alocação de ativos em três níveis:
 
 🟢 Conservador: Foco em segurança e liquidez (Tesouro Selic, CDB).
+
 🟡 Moderado: Equilíbrio entre renda fixa e variável.
+
 🔴 Agressivo: Busca por retornos maiores com exposição à volatilidade (Ações, Cripto).
 
 • Inteligência de Localização: O app detecta automaticamente se você está no Brasil para validar a configuração da moeda em Reais (BRL).
