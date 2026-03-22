@@ -8,9 +8,9 @@ Funcionalidades
 
 • Perfis de Investimento: Sugestões detalhadas de alocação de ativos em três níveis:
 
-  🟢 Conservador: Foco em segurança e liquidez (Tesouro Selic, CDB).
-  🟡 Moderado: Equilíbrio entre renda fixa e variável.
-  🔴 Agressivo: Busca por retornos maiores com exposição à volatilidade (Ações, Cripto).
+🟢 Conservador: Foco em segurança e liquidez (Tesouro Selic, CDB).
+🟡 Moderado: Equilíbrio entre renda fixa e variável.
+🔴 Agressivo: Busca por retornos maiores com exposição à volatilidade (Ações, Cripto).
 
 • Inteligência de Localização: O app detecta automaticamente se você está no Brasil para validar a configuração da moeda em Reais (BRL).
 • Design Moderno: Interface construída com Material Design 3, suporte a Tema Escuro e visual Edge-to-Edge.
