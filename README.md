@@ -1,3 +1,5 @@
+Aplicativo FinPlan é um aplicativo básico de organização financeira.
+
 FUNCIONALIDADES
 
 • Planejamento Simplificado: Insira seu salário mensal e quanto deseja investir para obter um cálculo instantâneo.<br>
