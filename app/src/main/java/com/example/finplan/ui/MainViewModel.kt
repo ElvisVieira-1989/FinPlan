@@ -5,6 +5,7 @@ import android.content.Context
 import android.location.Geocoder
 import android.location.Location
 import android.os.Build
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -19,9 +20,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import java.util.Currency
 import java.util.Locale
 
 class MainViewModel : ViewModel() {
+    private val TAG = "MainViewModel"
+
     var monthlySalary by mutableStateOf("")
     var investmentPercentage by mutableStateOf("")
 
@@ -30,6 +35,10 @@ class MainViewModel : ViewModel() {
 
     var locationMessage by mutableStateOf("Buscando localização...")
     var isInBrazil by mutableStateOf<Boolean?>(null)
+    
+    // Novo: Locale dinâmico baseado na localização detectada (padrão Brasil)
+    var currentLocale by mutableStateOf(Locale("pt", "BR"))
+        private set
 
     fun calculate() {
         val salary = monthlySalary.toDoubleOrNull() ?: 0.0
@@ -50,53 +59,96 @@ class MainViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
-                val location: Location? = fusedLocationClient.getCurrentLocation(
-                    Priority.PRIORITY_BALANCED_POWER_ACCURACY,
-                    null
-                ).await()
+                
+                // Estratégia de busca com timeouts
+                var location: Location? = withTimeoutOrNull(8000) {
+                    try {
+                        fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null).await()
+                    } catch (e: Exception) { null }
+                }
+
+                if (location == null) {
+                    location = withTimeoutOrNull(5000) {
+                        try {
+                            fusedLocationClient.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null).await()
+                        } catch (e: Exception) { null }
+                    }
+                }
+
+                if (location == null) {
+                    location = try {
+                        fusedLocationClient.lastLocation.await()
+                    } catch (e: Exception) { null }
+                }
 
                 if (location != null) {
-                    val geocoder = Geocoder(context, Locale.getDefault())
-                    
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        geocoder.getFromLocation(location.latitude, location.longitude, 1) { addresses ->
-                            if (addresses.isNotEmpty()) {
-                                updateLocationStatus(addresses[0].countryCode)
-                            } else {
-                                updateLocationStatus(null)
-                            }
-                        }
-                    } else {
-                        val addresses = withContext(Dispatchers.IO) {
-                            @Suppress("DEPRECATION")
-                            geocoder.getFromLocation(location.latitude, location.longitude, 1)
-                        }
-                        if (!addresses.isNullOrEmpty()) {
-                            updateLocationStatus(addresses[0].countryCode)
-                        } else {
-                            updateLocationStatus(null)
-                        }
-                    }
+                    processLocation(context, location)
                 } else {
-                    updateLocationStatus(null)
+                    updateLocationStatus(null, null)
                 }
             } catch (e: Exception) {
-                updateLocationStatus(null)
+                updateLocationStatus(null, null)
             }
         }
     }
 
-    private fun updateLocationStatus(countryCode: String?) {
-        if (countryCode == "BR") {
+    private suspend fun processLocation(context: Context, location: Location) {
+        if (!Geocoder.isPresent()) {
+            updateLocationStatus(null, null)
+            return
+        }
+
+        val geocoder = Geocoder(context, Locale.getDefault())
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                geocoder.getFromLocation(location.latitude, location.longitude, 1) { addresses ->
+                    viewModelScope.launch(Dispatchers.Main) {
+                        val address = addresses.firstOrNull()
+                        updateLocationStatus(address?.countryCode, address?.countryName)
+                    }
+                }
+            } else {
+                val addresses = withContext(Dispatchers.IO) {
+                    try {
+                        @Suppress("DEPRECATION")
+                        geocoder.getFromLocation(location.latitude, location.longitude, 1)
+                    } catch (e: Exception) { null }
+                }
+                val address = addresses?.firstOrNull()
+                updateLocationStatus(address?.countryCode, address?.countryName)
+            }
+        } catch (e: Exception) {
+            updateLocationStatus(null, null)
+        }
+    }
+
+    private fun updateLocationStatus(countryCode: String?, countryName: String?) {
+        if (countryCode.isNullOrBlank()) {
+            isInBrazil = null
+            locationMessage = "Localização não determinada. Usando BRL por padrão."
+            currentLocale = Locale("pt", "BR")
+            return
+        }
+
+        // Define o Locale baseado no país detectado
+        val detectedLocale = Locale("", countryCode)
+        currentLocale = detectedLocale
+        
+        val currencyCode = try {
+            Currency.getInstance(detectedLocale).currencyCode
+        } catch (e: Exception) { "???" }
+
+        if (countryCode.equals("BR", ignoreCase = true)) {
             isInBrazil = true
-            locationMessage = "Você Está no Brasil"
+            locationMessage = "Localizado: Brasil. Moeda: BRL (R$)"
         } else {
             isInBrazil = false
-            locationMessage = if (countryCode != null) {
-                "Você está fora do Brasil, o app está configurado apenas para Reais BRL"
-            } else {
-                "Não foi possível determinar o país, o app está configurado apenas para Reais BRL"
-            }
+            val displayCountry = countryName ?: detectedLocale.displayCountry
+            locationMessage = "Detectado: $displayCountry. App ajustado para a moeda local ($currencyCode)."
         }
+        
+        // Recalcula para garantir que a UI mostre os novos formatos
+        calculate()
+        Log.d(TAG, "updateLocationStatus: $locationMessage | Locale: ${currentLocale.displayName}")
     }
 }
