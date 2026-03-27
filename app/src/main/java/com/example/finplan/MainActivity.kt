@@ -39,9 +39,9 @@ import com.example.finplan.model.InvestmentProfile
 import com.example.finplan.ui.MainViewModel
 import com.example.finplan.ui.theme.FinPlanTheme
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import com.google.accompanist.permissions.isGranted
-import com.google.accompanist.permissions.rememberPermissionState
+import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import java.text.NumberFormat
+import java.util.Currency
 import java.util.Locale
 
 class MainActivity : ComponentActivity() {
@@ -60,15 +60,19 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainScreen(viewModel: MainViewModel = viewModel()) {
     val context = LocalContext.current
-    val locationPermissionState = rememberPermissionState(
-        permission = Manifest.permission.ACCESS_COARSE_LOCATION
+    
+    val locationPermissionsState = rememberMultiplePermissionsState(
+        permissions = listOf(
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        )
     )
 
-    LaunchedEffect(locationPermissionState.status.isGranted) {
-        if (locationPermissionState.status.isGranted) {
+    LaunchedEffect(locationPermissionsState.allPermissionsGranted) {
+        if (locationPermissionsState.allPermissionsGranted) {
             viewModel.checkLocation(context)
         } else {
-            locationPermissionState.launchPermissionRequest()
+            locationPermissionsState.launchMultiplePermissionRequest()
         }
     }
 
@@ -78,7 +82,7 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
             LargeTopAppBar(
                 title = { 
                     Text(
-                        "FinPlan", 
+                        "FinPlan Global", 
                         style = MaterialTheme.typography.headlineLarge,
                         fontWeight = FontWeight.ExtraBold 
                     ) 
@@ -98,7 +102,6 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(28.dp)
         ) {
-            // Banner de Localização Animado
             AnimatedVisibility(
                 visible = true,
                 enter = fadeIn() + expandVertically(),
@@ -107,7 +110,6 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
                 LocationBanner(viewModel.locationMessage, viewModel.isInBrazil)
             }
 
-            // Seção de Input com Estilo Expressivo
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(24.dp),
@@ -127,24 +129,28 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
                         )
                         Spacer(Modifier.width(12.dp))
                         Text(
-                            "Seu Perfil Financeiro",
+                            "Perfil Financeiro Local",
                             style = MaterialTheme.typography.titleLarge,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold
                         )
                     }
 
+                    val currencySymbol = try {
+                        Currency.getInstance(viewModel.currentLocale).symbol
+                    } catch (e: Exception) { "$" }
+                    
                     OutlinedTextField(
                         value = viewModel.monthlySalary,
                         onValueChange = { 
                             viewModel.monthlySalary = it
                             viewModel.calculate()
                         },
-                        label = { Text("Salário Mensal") },
+                        label = { Text("Renda Mensal") },
                         modifier = Modifier.fillMaxWidth(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         leadingIcon = { Icon(Icons.Default.AttachMoney, contentDescription = null) },
-                        suffix = { Text("BRL") },
+                        suffix = { Text(currencySymbol) },
                         shape = RoundedCornerShape(16.dp),
                         singleLine = true
                     )
@@ -166,16 +172,14 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
             }
 
             if (viewModel.expenseCategories.isNotEmpty()) {
-                // Seção de Gastos Sugeridos
-                SectionTitle("Distribuição Sugerida")
+                SectionTitle("Sugestão de Gastos")
                 viewModel.expenseCategories.forEach { category ->
-                    ExpenseItem(category)
+                    ExpenseItem(category, viewModel.currentLocale)
                 }
 
-                // Seção de Perfis de Investimento
-                SectionTitle("Sugestões de Investimento")
+                SectionTitle("Portfólio de Investimentos")
                 viewModel.investmentProfiles.forEach { profile ->
-                    InvestmentProfileCard(profile)
+                    InvestmentProfileCard(profile, viewModel.currentLocale)
                 }
             } else {
                 EmptyState()
@@ -203,7 +207,7 @@ fun EmptyState() {
         )
         Spacer(Modifier.height(16.dp))
         Text(
-            "Preencha os dados acima para\nreceber seu planejamento personalizado.",
+            "Preencha os dados acima para\nver o planejamento na sua moeda local.",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -215,13 +219,13 @@ fun EmptyState() {
 fun LocationBanner(message: String, isInBrazil: Boolean?) {
     val backgroundColor = when (isInBrazil) {
         true -> MaterialTheme.colorScheme.primary
-        false -> MaterialTheme.colorScheme.error
-        null -> MaterialTheme.colorScheme.secondary
+        false -> MaterialTheme.colorScheme.tertiary
+        null -> MaterialTheme.colorScheme.secondaryContainer
     }
     val contentColor = when (isInBrazil) {
         true -> MaterialTheme.colorScheme.onPrimary
-        false -> MaterialTheme.colorScheme.onError
-        null -> MaterialTheme.colorScheme.onSecondary
+        false -> MaterialTheme.colorScheme.onTertiary
+        null -> MaterialTheme.colorScheme.onSecondaryContainer
     }
 
     Row(
@@ -238,7 +242,8 @@ fun LocationBanner(message: String, isInBrazil: Boolean?) {
             text = message,
             style = MaterialTheme.typography.labelLarge,
             color = contentColor,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.weight(1f)
         )
     }
 }
@@ -254,9 +259,8 @@ fun SectionTitle(title: String) {
 }
 
 @Composable
-fun ExpenseItem(category: ExpenseCategory) {
-    val localeBR = Locale.Builder().setLanguage("pt").setRegion("BR").build()
-    val currencyFormatter = NumberFormat.getCurrencyInstance(localeBR)
+fun ExpenseItem(category: ExpenseCategory, locale: Locale) {
+    val currencyFormatter = NumberFormat.getCurrencyInstance(locale)
     
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -277,7 +281,7 @@ fun ExpenseItem(category: ExpenseCategory) {
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    String.format(localeBR, "%.1f%% da renda mensal", category.percentage), 
+                    String.format(locale, "%.1f%% da renda", category.percentage), 
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -293,9 +297,8 @@ fun ExpenseItem(category: ExpenseCategory) {
 }
 
 @Composable
-fun InvestmentProfileCard(profile: InvestmentProfile) {
-    val localeBR = Locale.Builder().setLanguage("pt").setRegion("BR").build()
-    val currencyFormatter = NumberFormat.getCurrencyInstance(localeBR)
+fun InvestmentProfileCard(profile: InvestmentProfile, locale: Locale) {
+    val currencyFormatter = NumberFormat.getCurrencyInstance(locale)
     
     OutlinedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -361,7 +364,7 @@ fun InvestmentProfileCard(profile: InvestmentProfile) {
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            String.format(localeBR, "%.0f%%", allocation.percentage),
+                            String.format(locale, "%.0f%%", allocation.percentage),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.secondary
                         )
